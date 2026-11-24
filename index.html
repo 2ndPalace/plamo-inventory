@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1b1d1f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>プラモ在庫管理</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&family=BIZ+UDPGothic:wght@400;700&display=swap">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1 class="app-title">プラモ在庫</h1>
+      <span id="sync-status-badge" class="sync-badge" title="保存先">ローカル</span>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- トースト通知 -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- タブ1: 在庫一覧 -->
+    <section id="view-inventory" class="tab-view active" aria-label="在庫一覧">
+      <div class="tools">
+        <input type="search" id="search-input" class="input-control" placeholder="商品名・JAN・品番・置き場で検索">
+
+        <div class="kind-tabs" role="group" aria-label="種別">
+          <button type="button" class="kind-tab active" data-filter-kind="all" aria-pressed="true">全部</button>
+          <button type="button" class="kind-tab" data-filter-kind="kit" aria-pressed="false">ガンプラ</button>
+          <button type="button" class="kind-tab" data-filter-kind="paint" aria-pressed="false">塗料</button>
+          <button type="button" class="kind-tab" data-filter-kind="decal" aria-pressed="false">デカール</button>
+          <button type="button" class="kind-tab" data-filter-kind="other" aria-pressed="false">その他</button>
+        </div>
+
+        <div class="sub-filters">
+          <div class="toggle-row" role="group" aria-label="在庫状態">
+            <button type="button" class="toggle active" data-filter-status="all" aria-pressed="true">全状態</button>
+            <button type="button" class="toggle" data-filter-status="ok" aria-pressed="false">在庫あり</button>
+            <button type="button" class="toggle" data-filter-status="low" aria-pressed="false">残りわずか</button>
+            <button type="button" class="toggle" data-filter-status="out" aria-pressed="false">不足</button>
+            <button type="button" class="toggle" data-filter-status="none" aria-pressed="false">在庫なし</button>
+          </div>
+          <div class="toggle-row" id="build-chip-row" role="group" aria-label="製作状況（ガンプラ）">
+            <button type="button" class="toggle active" data-filter-build="all" aria-pressed="true">全製作</button>
+            <button type="button" class="toggle" data-filter-build="unbuilt" aria-pressed="false">未組立</button>
+            <button type="button" class="toggle" data-filter-build="building" aria-pressed="false">製作中</button>
+            <button type="button" class="toggle" data-filter-build="built" aria-pressed="false">完成</button>
+          </div>
+        </div>
+
+        <div class="summary-bar">
+          <span id="inventory-count-text" class="num">0件</span>
+          <button type="button" id="btn-open-new-manual" class="btn btn-secondary btn-sm">＋ 新規登録</button>
+        </div>
+      </div>
+
+      <div id="inventory-list" class="sheet item-list"></div>
+    </section>
+
+    <!-- タブ2: 買い物リスト -->
+    <section id="view-shopping" class="tab-view" aria-label="買い物リスト" hidden>
+      <div class="tools">
+        <h2 class="section-title">買い物リスト</h2>
+        <p class="section-desc">所持数が目標数より少ない品目です。</p>
+        <div class="summary-bar">
+          <span id="shopping-count-text" class="num">0件</span>
+        </div>
+      </div>
+      <div id="shopping-list" class="sheet item-list"></div>
+    </section>
+
+    <!-- タブ3: JAN登録 -->
+    <section id="view-register" class="tab-view" aria-label="JAN登録" hidden>
+      <div class="panel">
+        <h2 class="section-title">JANで登録・照合</h2>
+        <p class="section-desc">読み取ったJANを、自分の在庫 → UPCitemdb → ホビーサーチ用プロキシの順に照合します。</p>
+
+        <div class="scanner-controls">
+          <button type="button" id="btn-start-scan" class="btn btn-primary btn-lg">カメラで読み取る</button>
+          <button type="button" id="btn-stop-scan" class="btn btn-secondary btn-lg" hidden>カメラを止める</button>
+        </div>
+        <p id="scanner-hint" class="hint-text"></p>
+
+        <div id="scanner-viewport-wrap" class="scanner-viewport-wrap" hidden>
+          <video id="scanner-video" class="scanner-video" playsinline muted autoplay></video>
+          <div class="scanner-guide-box" aria-hidden="true"></div>
+        </div>
+
+        <form id="jan-lookup-form" class="jan-input-row">
+          <input type="text" id="jan-manual-input" class="input-control num" inputmode="numeric" placeholder="JANを入力してEnter" aria-label="JANコード">
+          <button type="submit" id="btn-jan-lookup" class="btn btn-primary">照合</button>
+        </form>
+      </div>
+
+      <!-- 照合ログ -->
+      <div id="lookup-log-panel" class="panel" hidden>
+        <h3 class="subsection-title">照合ログ</h3>
+        <ul id="lookup-log-list" class="log-list"></ul>
+      </div>
+
+      <!-- ローカル一致時のクイック操作 -->
+      <div id="local-match-panel" class="panel match-panel" hidden>
+        <h3 class="subsection-title">自分の在庫にあります</h3>
+        <div id="local-match-card" class="item-list"></div>
+      </div>
+
+      <!-- 外部確認リンク -->
+      <div id="web-search-panel" class="panel" hidden>
+        <h3 class="subsection-title">Webで確認</h3>
+        <p class="section-desc">各サイトの検索結果を新しいタブで開きます。</p>
+        <div id="web-search-links" class="web-links-grid"></div>
+      </div>
+
+      <!-- 登録・編集フォーム -->
+      <div id="item-form-panel" class="panel" hidden>
+        <h3 id="item-form-title" class="subsection-title">新規登録</h3>
+        <form id="item-form" class="item-form">
+          <input type="hidden" id="field-id">
+          <input type="hidden" id="field-source" value="manual">
+
+          <div class="form-row">
+            <label for="field-name">商品名 <span class="req">必須</span></label>
+            <input type="text" id="field-name" class="input-control" required placeholder="例: HG 1/144 RX-78-2 ガンダム / Mr.カラー C1">
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-kind">種別</label>
+              <select id="field-kind" class="input-control">
+                <option value="kit">ガンプラ（本体）</option>
+                <option value="paint">塗料</option>
+                <option value="decal">デカール</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="field-jan">JAN</label>
+              <input type="text" id="field-jan" class="input-control num" inputmode="numeric" placeholder="任意">
+            </div>
+          </div>
+
+          <div class="form-grid-2" id="kit-fields" hidden>
+            <div class="form-row">
+              <label for="field-grade">グレード</label>
+              <input type="text" id="field-grade" class="input-control num" list="grade-options" placeholder="HG / RG / MG / PG">
+              <datalist id="grade-options">
+                <option value="HG"></option>
+                <option value="RG"></option>
+                <option value="MG"></option>
+                <option value="PG"></option>
+                <option value="SD"></option>
+                <option value="EG"></option>
+                <option value="FM"></option>
+                <option value="MGSD"></option>
+              </datalist>
+            </div>
+            <div class="form-row">
+              <label for="field-buildStatus">製作状況</label>
+              <select id="field-buildStatus" class="input-control">
+                <option value="unbuilt">未組立</option>
+                <option value="building">製作中</option>
+                <option value="built">完成</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-qty">所持数</label>
+              <input type="number" id="field-qty" class="input-control num" min="0" step="1" value="1" required>
+            </div>
+            <div class="form-row">
+              <label for="field-desired">目標数</label>
+              <input type="number" id="field-desired" class="input-control num" min="0" step="1" value="1" required>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-brand">メーカー</label>
+              <input type="text" id="field-brand" class="input-control" placeholder="例: BANDAI SPIRITS / GSIクレオス">
+            </div>
+            <div class="form-row">
+              <label for="field-code">品番</label>
+              <input type="text" id="field-code" class="input-control num" placeholder="例: C1 / XF-1">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-scale">スケール</label>
+              <input type="text" id="field-scale" class="input-control num" placeholder="例: 1/144">
+            </div>
+            <div class="form-row">
+              <label for="field-colorHex">色見本</label>
+              <div class="color-input-wrap">
+                <input type="color" id="field-colorPicker" class="color-picker" value="#dfe0dc" aria-label="色を選ぶ">
+                <input type="text" id="field-colorHex" class="input-control num" placeholder="#RRGGBB">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-location">置き場</label>
+              <input type="text" id="field-location" class="input-control" placeholder="例: 塗料ラック A-1 / 積みプラ棚">
+            </div>
+            <div class="form-row">
+              <label for="field-subject">題材・用途</label>
+              <input type="text" id="field-subject" class="input-control" placeholder="例: 宇宙世紀 / 戦車">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="field-memo">メモ</label>
+            <textarea id="field-memo" class="input-control" rows="2" placeholder="希釈比・残量・改造予定など"></textarea>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-imageUrl">画像URL</label>
+              <input type="url" id="field-imageUrl" class="input-control" placeholder="https://...">
+            </div>
+            <div class="form-row">
+              <label for="field-sourceUrl">参照URL</label>
+              <input type="url" id="field-sourceUrl" class="input-control" placeholder="https://...">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">保存</button>
+            <button type="button" id="btn-cancel-form" class="btn btn-secondary btn-lg">キャンセル</button>
+          </div>
+          <button type="button" id="btn-delete-item" class="btn btn-danger-text" hidden>この品目を削除</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- タブ4: 設定・同期 -->
+    <section id="view-settings" class="tab-view" aria-label="設定と同期" hidden>
+      <div class="panel">
+        <h2 class="section-title">GitHub 同期</h2>
+        <p class="section-desc">在庫JSONを、GitHubリポジトリの1ファイルに保存し、そこから読み込みます。</p>
+        <div class="sync-actions-grid">
+          <button type="button" id="btn-github-pull" class="btn btn-secondary btn-lg">GitHubから読み込む</button>
+          <button type="button" id="btn-github-push" class="btn btn-primary btn-lg">GitHubへ保存</button>
+        </div>
+        <div id="github-conflict-box" class="alert-box alert-warning" hidden>
+          <p id="github-conflict-msg">リモート側が更新されているため競合しました。先に「GitHubから読み込む」を実行してください。</p>
+          <button type="button" id="btn-github-force-push" class="btn btn-danger btn-sm">強制上書き（最新SHAを取得して再保存）</button>
+        </div>
+        <p id="github-sync-meta" class="hint-text num"></p>
+      </div>
+
+      <div class="panel">
+        <h2 class="section-title">設定</h2>
+        <form id="settings-form" class="item-form">
+          <h3 class="subsection-title">GitHub リポジトリ</h3>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="set-github-owner">Owner（ユーザー名 / Org）</label>
+              <input type="text" id="set-github-owner" class="input-control" placeholder="your-name">
+            </div>
+            <div class="form-row">
+              <label for="set-github-repo">Repo</label>
+              <input type="text" id="set-github-repo" class="input-control" placeholder="plamo-data">
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="set-github-branch">Branch</label>
+              <input type="text" id="set-github-branch" class="input-control" placeholder="main">
+            </div>
+            <div class="form-row">
+              <label for="set-github-path">Path</label>
+              <input type="text" id="set-github-path" class="input-control" placeholder="inventory.json">
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="set-github-token">Personal Access Token（Fine-grained）</label>
+            <input type="password" id="set-github-token" class="input-control" autocomplete="off" placeholder="github_pat_...">
+            <p class="hint-text warning-text">トークンはこの端末の localStorage にだけ保存されます。JSONエクスポートには含まれません。</p>
+          </div>
+
+          <h3 class="subsection-title">JAN照合プロキシ</h3>
+          <div class="form-row">
+            <label for="set-proxy-url">ホビーサーチ用プロキシ URL</label>
+            <input type="url" id="set-proxy-url" class="input-control" placeholder="https://hobbysearch-worker.example.workers.dev">
+            <p class="hint-text">Cloudflare Worker のURLです。未設定でも使えます。</p>
+          </div>
+          <div class="notice-box">
+            UPCitemdb は無料トライアルAPI（キー不要）を使います。1日の回数制限があり、海外DBが中心のため、日本の塗料やデカールは見つからないことがあります。
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">設定を保存</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2 class="section-title">JSON バックアップ / 復元</h2>
+        <p class="section-desc">エクスポートするJSONには、トークンや設定は含まれません。</p>
+        <div class="sync-actions-grid">
+          <button type="button" id="btn-export-json" class="btn btn-secondary btn-lg">JSONエクスポート</button>
+          <label class="btn btn-secondary btn-lg file-btn-label">
+            JSONインポート
+            <input type="file" id="input-import-json" accept=".json,application/json" hidden>
+          </label>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 下部固定ナビゲーション（片手操作向け） -->
+  <nav class="bottom-nav" aria-label="メインメニュー">
+    <button type="button" class="nav-btn active" data-tab="inventory" aria-current="page">在庫</button>
+    <button type="button" class="nav-btn" data-tab="shopping">
+      買い物<span id="nav-shopping-badge" class="nav-badge num" hidden>0</span>
+    </button>
+    <button type="button" class="nav-btn" data-tab="register">JAN登録</button>
+    <button type="button" class="nav-btn" data-tab="settings">設定</button>
+  </nav>
+
+  <!-- ZXing UMD (カメラバーコード読み取り用) -->
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

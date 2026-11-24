@@ -1,0 +1,19 @@
+{
+  "name": "プラモ在庫管理",
+  "short_name": "プラモ在庫",
+  "description": "塗料・デカール等のプラモデル用資材を管理する静的PWA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f5",
+  "theme_color": "#1b263b",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%231b263b'/%3E%3Crect x='42' y='48' width='108' height='96' rx='12' fill='none' stroke='%23ffffff' stroke-width='10'/%3E%3Cpath d='M42 82h108M78 82v62' stroke='%2360a5fa' stroke-width='10'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
