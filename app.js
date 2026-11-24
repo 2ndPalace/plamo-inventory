@@ -1031,10 +1031,21 @@
     el.localMatchPanel.appendChild(extraBtn);
   }
 
+  // 外部照会が固まっても登録フォームまで必ず進めるよう、fetchに上限時間を付ける
+  async function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      return await fetch(url, { method: 'GET', signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function tryUpcItemDb(jan) {
     const url = `https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(jan)}`;
     try {
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetchWithTimeout(url, 6000);
       if (!res.ok) {
         addLookupLog(`2. UPCitemdb: HTTP ${res.status} で取得失敗（レート制限等の可能性）。次へ進みます。`, 'warn');
         return null;
@@ -1075,7 +1086,7 @@
     const url = `${base}${sep}jan=${encodeURIComponent(jan)}`;
 
     try {
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetchWithTimeout(url, 12000);
       const text = await res.text();
       let data = null;
       try {
