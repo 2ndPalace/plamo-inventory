@@ -70,6 +70,11 @@
   let scanStatusIntervalId = null;
   let currentCameraLabel = '';
   let parallelDetectorOn = false;
+  let zxingWasmModule = null;
+  let wasmScanOn = false;
+  let scanLoopId = null;
+  let captureCanvasEl = null;
+  let scanEngine = '';
   let backCameras = [];
   let currentCameraId = '';
   let isScanning = false;
@@ -789,6 +794,83 @@
   }
 
   // --- カメラ読み取り (ZXing 第一、BarcodeDetector フォールバック) ---
+  // 背面カメラを列挙し、使用する deviceId を決める（保存済みの選択を優先）
+  async function pickBackCameraDevice() {
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      });
+      probe.getTracks().forEach((t) => t.stop());
+      const devices = (await navigator.mediaDevices.enumerateDevices())
+        .filter((d) => d.kind === 'videoinput');
+      backCameras = devices.filter((d) => !/front|前面/i.test(d.label));
+      if (!backCameras.length) backCameras = devices;
+      const saved = backCameras.find((d) => d.deviceId === settings.cameraDeviceId);
+      const main = backCameras.find((d) => /背面カメラ|back camera/i.test(d.label));
+      const picked = saved || main || backCameras[backCameras.length - 1];
+      if (picked) {
+        currentCameraId = picked.deviceId;
+        currentCameraLabel = picked.label || '';
+        el.btnSwitchCamera.hidden = backCameras.length < 2;
+        return picked.deviceId;
+      }
+    } catch {
+      // 列挙に失敗したら constraints 方式にフォールバック
+    }
+    return undefined;
+  }
+
+  // zxing-wasm（ZXing-C++）で自前のキャプチャループを回す
+  function startWasmScanLoop() {
+    wasmScanOn = true;
+    if (!captureCanvasEl) captureCanvasEl = document.createElement('canvas');
+    const tick = async () => {
+      if (!wasmScanOn || !isScanning) return;
+      const v = el.scannerVideo;
+      if (v.readyState >= 2 && v.videoWidth) {
+        const w = v.videoWidth;
+        const h = v.videoHeight;
+        if (captureCanvasEl.width !== w || captureCanvasEl.height !== h) {
+          captureCanvasEl.width = w;
+          captureCanvasEl.height = h;
+        }
+        const ctx = captureCanvasEl.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(v, 0, 0, w, h);
+        decodeAttempts++;
+        try {
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const results = await zxingWasmModule.readBarcodes(imageData, {
+            formats: ['EAN-13', 'EAN-8', 'UPC-A', 'UPC-E', 'Code128'],
+            tryHarder: true,
+            tryRotate: true,
+            tryInvert: true,
+            tryDownscale: true,
+            maxNumberOfSymbols: 1
+          });
+          for (const r of results) {
+            const text = (r.text || '').trim();
+            if (/^\d{13}$/.test(text) || /^\d{8}$/.test(text)) {
+              handleDecodedJan(text);
+              return;
+            }
+          }
+        } catch (e) {
+          lastDecodeError = `${e.name || 'Error'}: ${e.message || e}`;
+          updateScanStatus();
+        }
+      }
+      if (wasmScanOn && isScanning) {
+        scanLoopId = setTimeout(tick, 120);
+      }
+    };
+    tick();
+  }
+
   async function startCameraScan() {
     if (isScanning) return;
 
@@ -798,7 +880,58 @@
       return;
     }
 
-    // 1. ZXing (iPhone Safari 含む最優先)
+    // 0. zxing-wasm（ZXing-C++）+ 自前キャプチャループ（最優先）
+    // ZXing-JS の映像読み取りが iOS 実機で読めなかったため、より強力な
+    // C++ 版デコーダに切り替える。回転・反転・縮小も自動で試行する。
+    try {
+      if (!zxingWasmModule) {
+        zxingWasmModule = await import(
+          'https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.4/dist/es/reader/index.js'
+        );
+        await zxingWasmModule.prepareZXingModule({ fireImmediately: true });
+      }
+      isScanning = true;
+      toggleScannerUi(true);
+      el.scannerHint.textContent = 'バーコードを探しています…';
+      decodeAttempts = 0;
+      lastDecodeError = '';
+      scanEngine = 'C++';
+      const wasmDeviceId = await pickBackCameraDevice();
+      const videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+      if (wasmDeviceId) {
+        videoConstraints.deviceId = { exact: wasmDeviceId };
+      } else {
+        videoConstraints.facingMode = { ideal: 'environment' };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: false
+      });
+      if (!isScanning) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      el.scannerVideo.srcObject = stream;
+      if (el.scannerVideo.play) {
+        await el.scannerVideo.play().catch(() => {});
+      }
+      startWasmScanLoop();
+      updateScanStatus();
+      scanStatusIntervalId = setInterval(updateScanStatus, 2000);
+      startParallelDetector();
+      scanWatchdogId = setTimeout(() => {
+        if (isScanning && (!el.scannerVideo.videoWidth || el.scannerVideo.readyState < 2)) {
+          el.scannerHint.textContent =
+            'カメラ映像が届いていません。Safari本体で開いているか、設定アプリ→Safari→カメラの許可を確認してください。アプリ内ブラウザではカメラが使えないことがあります。';
+        }
+      }, 3500);
+      return;
+    } catch (err) {
+      // WASM が使えない環境では従来方式（ZXing-JS）へ
+      stopCameraScan();
+    }
+
+    // 1. ZXing-JS（フォールバック）
     if (window.ZXing && window.ZXing.BrowserMultiFormatReader) {
       try {
         isScanning = true;
@@ -817,6 +950,7 @@
         zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
         decodeAttempts = 0;
         lastDecodeError = '';
+        scanEngine = 'JS';
         const onResult = (result, err) => {
           decodeAttempts++;
           if (result) {
@@ -832,33 +966,7 @@
           }
         };
 
-        // iOS では facingMode 任せだと映像が来ないことがあるため、
-        // 先に許可を取って背面カメラを deviceId で明示する。
-        // 近距離に強いレンズは機種で違うので、背面レンズは切替可能にし選択を保存する。
-        let deviceId;
-        try {
-          const probe = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' } },
-            audio: false
-          });
-          probe.getTracks().forEach((t) => t.stop());
-          const devices = (await navigator.mediaDevices.enumerateDevices())
-            .filter((d) => d.kind === 'videoinput');
-          backCameras = devices.filter((d) => !/front|前面/i.test(d.label));
-          if (!backCameras.length) backCameras = devices;
-          const saved = backCameras.find((d) => d.deviceId === settings.cameraDeviceId);
-          const main = backCameras.find((d) => /背面カメラ|back camera/i.test(d.label));
-          const picked = saved || main || backCameras[backCameras.length - 1];
-          if (picked) {
-            deviceId = picked.deviceId;
-            currentCameraId = picked.deviceId;
-            currentCameraLabel = picked.label || '';
-            el.btnSwitchCamera.hidden = backCameras.length < 2;
-          }
-        } catch {
-          // デバイス列挙に失敗したら constraints 方式にフォールバック
-          deviceId = undefined;
-        }
+        const deviceId = await pickBackCameraDevice();
 
         // 解像度は起動時の制約で要求する（後付けの applyConstraints はしない）。
         // 制約なしだと iOS が 480×640 を返し、バーが潰れて読めない実測があった。
@@ -957,6 +1065,11 @@
 
   function stopCameraScan() {
     isScanning = false;
+    wasmScanOn = false;
+    if (scanLoopId) {
+      clearTimeout(scanLoopId);
+      scanLoopId = null;
+    }
     if (scanWatchdogId) {
       clearTimeout(scanWatchdogId);
       clearTimeout(decodeWatchdogId);
@@ -1013,6 +1126,7 @@
     let text = 'バーコードを探しています…';
     if (currentCameraLabel) text += `（${currentCameraLabel}）`;
     text += ` 試行${decodeAttempts}回・映像${vw}×${vh}`;
+    if (scanEngine) text += `・方式${scanEngine}`;
     if (lastDecodeError) text += `・エラー: ${lastDecodeError}`;
     el.scannerHint.textContent = text;
   }
