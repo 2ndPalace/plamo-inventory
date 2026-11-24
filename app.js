@@ -61,6 +61,7 @@
   let zxingReader = null;
   let detectorStream = null;
   let detectorRafId = null;
+  let scanWatchdogId = null;
   let isScanning = false;
 
   // DOM 要素参照
@@ -790,32 +791,65 @@
         el.scannerHint.textContent = 'バーコードを探しています…';
 
         zxingReader = new window.ZXing.BrowserMultiFormatReader();
-        const constraints = {
-          video: {
-            facingMode: { ideal: 'environment' }
+        const onResult = (result, err) => {
+          if (result) {
+            const code = result.getText().trim();
+            if (code) {
+              stopCameraScan();
+              el.janManualInput.value = code;
+              runJanLookupChain(code);
+            }
+          } else if (err && !(err instanceof window.ZXing.NotFoundException)) {
+            // 連続読み取り中の一時的なデコード失敗は無視
           }
         };
 
-        await zxingReader.decodeFromConstraints(
-          constraints,
-          el.scannerVideo,
-          (result, err) => {
-            if (result) {
-              const code = result.getText().trim();
-              if (code) {
-                stopCameraScan();
-                el.janManualInput.value = code;
-                runJanLookupChain(code);
-              }
-            } else if (err && !(err instanceof window.ZXing.NotFoundException)) {
-              // 連続読み取り中の一時的なデコード失敗は無視
-            }
+        // iOS では facingMode 任せだと映像が来ないことがあるため、
+        // 先に許可を取って背面のメインカメラを deviceId で明示する。
+        let deviceId;
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false
+          });
+          probe.getTracks().forEach((t) => t.stop());
+          const devices = (await navigator.mediaDevices.enumerateDevices())
+            .filter((d) => d.kind === 'videoinput');
+          const main = devices.find((d) => /背面カメラ|back camera/i.test(d.label));
+          const back = devices.find((d) => /back|rear|背面|後面/i.test(d.label)
+            && !/front|前面/i.test(d.label));
+          const nonFront = devices.filter((d) => !/front|前面/i.test(d.label));
+          const picked = main || back || nonFront[nonFront.length - 1] || devices[0];
+          if (picked) deviceId = picked.deviceId;
+        } catch {
+          // デバイス列挙に失敗したら constraints 方式にフォールバック
+          deviceId = undefined;
+        }
+
+        if (deviceId) {
+          await zxingReader.decodeFromVideoDevice(deviceId, el.scannerVideo, onResult);
+        } else {
+          await zxingReader.decodeFromConstraints(
+            { video: { facingMode: { ideal: 'environment' } } },
+            el.scannerVideo,
+            onResult
+          );
+        }
+        if (el.scannerVideo.play) {
+          el.scannerVideo.play().catch(() => {});
+        }
+
+        // 映像が届いていない場合の見守り（真っ黒なまま無言にしない）
+        scanWatchdogId = setTimeout(() => {
+          if (isScanning && (!el.scannerVideo.videoWidth || el.scannerVideo.readyState < 2)) {
+            el.scannerHint.textContent =
+              'カメラ映像が届いていません。Safari本体で開いているか、設定アプリ→Safari→カメラの許可を確認してください。アプリ内ブラウザではカメラが使えないことがあります。';
           }
-        );
+        }, 3500);
         return;
       } catch (err) {
         stopCameraScan();
-        el.scannerHint.textContent = `カメラを起動できませんでした (${err.message || err})。別の読み取り方式を試します…`;
+        el.scannerHint.textContent = `カメラを起動できませんでした (${err.name || ''} ${err.message || err})。別の読み取り方式を試します…`;
       }
     }
 
@@ -870,6 +904,10 @@
 
   function stopCameraScan() {
     isScanning = false;
+    if (scanWatchdogId) {
+      clearTimeout(scanWatchdogId);
+      scanWatchdogId = null;
+    }
     if (zxingReader) {
       try {
         zxingReader.reset();
