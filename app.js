@@ -860,15 +860,22 @@
           deviceId = undefined;
         }
 
+        // 解像度は起動時の制約で要求する（後付けの applyConstraints はしない）。
+        // 制約なしだと iOS が 480×640 を返し、バーが潰れて読めない実測があった。
+        const videoConstraints = {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        };
         if (deviceId) {
-          await zxingReader.decodeFromVideoDevice(deviceId, el.scannerVideo, onResult);
+          videoConstraints.deviceId = { exact: deviceId };
         } else {
-          await zxingReader.decodeFromConstraints(
-            { video: { facingMode: { ideal: 'environment' } } },
-            el.scannerVideo,
-            onResult
-          );
+          videoConstraints.facingMode = { ideal: 'environment' };
         }
+        await zxingReader.decodeFromConstraints(
+          { video: videoConstraints },
+          el.scannerVideo,
+          onResult
+        );
         if (el.scannerVideo.play) {
           el.scannerVideo.play().catch(() => {});
         }
