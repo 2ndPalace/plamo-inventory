@@ -527,7 +527,7 @@
 
     if (filtered.length === 0) {
       el.inventoryList.innerHTML =
-        '<div class="empty-state">該当する品目はありません。「JAN登録」か「＋ 新規登録」から追加できます。</div>';
+        '<div class="empty-state"><span class="empty-barcode" aria-hidden="true"></span>該当する品目はありません。<span class="nobr">「JAN登録」</span>か<span class="nobr">「＋ 新規登録」</span>から<span class="nobr">追加</span>できます。</div>';
       return;
     }
 

@@ -10,13 +10,13 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&family=BIZ+UDPGothic:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@400;700&family=BIZ+UDPGothic:wght@400;700&family=Michroma&family=Yuji+Syuku&family=Zen+Kaku+Gothic+Antique:wght@500;700;900&display=swap">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <header class="app-header">
     <div class="header-inner">
-      <h1 class="app-title">プラモ在庫</h1>
+      <h1 class="app-title"><span class="app-mark" aria-hidden="true">在</span>プラモ在庫</h1>
       <span id="sync-status-badge" class="sync-badge" title="保存先">ローカル</span>
     </div>
   </header>
@@ -38,6 +38,8 @@
           <button type="button" class="kind-tab" data-filter-kind="other" aria-pressed="false">その他</button>
         </div>
 
+        <details class="filter-details">
+          <summary class="filter-summary">絞り込み<span class="filter-summary-hint">状態・製作状況・販路</span></summary>
         <div class="sub-filters">
           <div class="toggle-row" role="group" aria-label="在庫状態">
             <button type="button" class="toggle active" data-filter-status="all" aria-pressed="true">全状態</button>
@@ -60,10 +62,11 @@
             <button type="button" class="toggle" data-filter-channel="limited" aria-pressed="false">限定品</button>
           </div>
         </div>
+        </details>
 
         <div class="summary-bar">
           <span id="inventory-count-text" class="num">0件</span>
-          <button type="button" id="btn-open-new-manual" class="btn btn-secondary btn-sm">＋ 新規登録</button>
+          <button type="button" id="btn-open-new-manual" class="btn btn-primary btn-sm">＋ 新規登録</button>
         </div>
       </div>
 

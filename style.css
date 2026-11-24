@@ -843,3 +843,373 @@ textarea.input-control {
     flex: 0 1 230px;
   }
 }
+
+/* ============================================================
+ * UI再構成（2026-11-24）— DESIGN_LOCK.md の同日付の変更記録に基づく上書き。
+ * 世界観・配色4色・書体は不変。変えたのは効かせ方だけ。
+ * ============================================================ */
+
+/* 地: ランナー枠の格子を薄く敷く */
+body {
+  background-image:
+    linear-gradient(rgba(27, 29, 31, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 29, 31, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* ヘッダー: 紙の表題にする（黒ベタ帯をやめる） */
+.app-header {
+  background: var(--sheet);
+  color: var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+
+.header-inner {
+  padding: 12px 16px;
+  align-items: center;
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 18px;
+}
+
+/* タイトルの小札（墨ベタに白1文字） */
+.app-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--ink);
+  color: var(--sheet);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sync-badge {
+  color: var(--ink-2);
+  border: 1px solid var(--rule);
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--sheet);
+}
+
+/* 検索欄: 一段大きく、紙の上で立つように */
+.tools .input-control {
+  min-height: 48px;
+  border-width: 1px;
+  box-shadow: 3px 3px 0 rgba(27, 29, 31, 0.18);
+}
+
+.tools .input-control:focus {
+  box-shadow: 3px 3px 0 rgba(27, 29, 31, 0.35);
+}
+
+/* 種別タブ: 選択中は「札のプレート」として少し浮かせる */
+.kind-tabs {
+  gap: 4px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.kind-tab {
+  margin-top: 6px;
+  min-height: 42px;
+}
+
+.kind-tab.active {
+  box-shadow: inset 0 0 0 2px var(--ink);
+  margin-top: 2px;
+  min-height: 46px;
+}
+
+/* 絞り込み（details）: 畳んだ状態では1行だけ */
+.filter-details {
+  margin-top: 10px;
+  border: 1px solid var(--rule);
+  background: rgba(251, 251, 248, 0.55);
+}
+
+.filter-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 44px;
+  padding: 11px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.filter-summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-summary::after {
+  content: "＋";
+  margin-left: auto;
+  font-family: var(--font-num);
+  font-weight: 700;
+}
+
+.filter-details[open ] .filter-summary::after {
+  content: "−";
+}
+
+.filter-summary-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.filter-details .sub-filters {
+  padding: 0 12px 6px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+/* 件数と新規登録の段: 件数は帳票の数字らしく太く */
+.summary-bar {
+  padding: 12px 0 12px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+#inventory-count-text,
+#shopping-count-text {
+  font-weight: 700;
+}
+
+/* 一覧の紙: 上の罫を強く */
+.sheet {
+  border-top: 2px solid var(--ink);
+}
+
+/* 札の列: 成形色を敷いて「ランナーに付いた札」にする */
+.item-tag {
+  background: #efefe9;
+}
+
+/* 行: 余白を少し広げ、名前を立てる */
+.item-body {
+  padding: 12px 12px;
+}
+
+.item-name {
+  font-size: 16px;
+}
+
+.tag-code {
+  height: 34px;
+  box-shadow: 2px 2px 0 rgba(27, 29, 31, 0.22);
+}
+
+/* 数量ボタン: 押したときは墨ベタに反転（成形品のボタンらしく） */
+.qty-btn:active {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+.qty-display strong {
+  font-size: 24px;
+}
+
+/* 空状態: JANの縞を置き、次の一手へ視線を運ぶ */
+.empty-state {
+  padding: 44px 20px 48px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.empty-barcode {
+  display: block;
+  width: 132px;
+  height: 40px;
+  margin: 0 auto 16px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 2px, transparent 2px 5px,
+    var(--ink) 5px 8px, transparent 8px 10px,
+    var(--ink) 10px 11px, transparent 11px 15px,
+    var(--ink) 15px 18px, transparent 18px 20px,
+    var(--ink) 20px 21px, transparent 21px 26px,
+    var(--ink) 26px 29px, transparent 29px 31px
+  );
+  opacity: 0.75;
+}
+
+/* パネル見出し: 左に墨の小帯を付けて区画を分ける */
+.panel .section-title {
+  border-left: 6px solid var(--ink);
+  padding-left: 9px;
+}
+
+/* 下部ナビ: 非選択の文字を少し明るく（黒地での可読性） */
+.nav-btn {
+  color: #c3c6c0;
+}
+
+.nav-btn.active {
+  color: var(--sheet);
+}
+
+/* ============================================================
+ * 書体再構成（2026-11-24）— MGS4のメニュー画面を参考にした書体変更。
+ * 英数字 = Michroma（Eurostile系）/ 見出し = Zen Kaku Gothic Antique
+ * 本文 = BIZ UDPGothic のまま。経緯は DESIGN_LOCK.md 同日付の記録。
+ * ============================================================ */
+:root {
+  --font-display: "Zen Kaku Gothic Antique", "BIZ UDPGothic", sans-serif;
+  --font-tech: "Michroma", "BIZ UDGothic", ui-monospace, monospace;
+}
+
+/* 見出し・操作系の日本語: 角の立ったゴシック＋広めの字間 */
+.app-title,
+.section-title,
+.subsection-title,
+.kind-tab,
+.nav-btn,
+.filter-summary,
+.btn,
+.toggle,
+.item-name {
+  font-family: var(--font-display);
+}
+
+.app-title {
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.section-title {
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.subsection-title {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.kind-tab {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.nav-btn {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.btn {
+  letter-spacing: 0.08em;
+}
+
+.filter-summary {
+  letter-spacing: 0.08em;
+}
+
+.toggle {
+  letter-spacing: 0.04em;
+}
+
+/* 商品名: 日本語は見出し書体、型式番号（英数字の塊）だけテクノ書体で立てる */
+.item-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.item-name .nobr {
+  font-family: var(--font-tech);
+  font-size: 0.88em;
+  letter-spacing: 0.05em;
+}
+
+/* 英数字（品番・数量・件数・JAN）: Michroma */
+.num,
+.tag-code,
+.qty-display,
+.qty-display strong,
+#inventory-count-text,
+#shopping-count-text,
+#github-sync-meta {
+  font-family: var(--font-tech);
+}
+
+/* 札の品番: Michromaは横幅が広いので少し小さく、字間を取る */
+.tag-code {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.tag-code.is-long {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+/* 数量: テクノ書体の数字を大きく */
+.qty-display strong {
+  font-size: 21px;
+  letter-spacing: 0.04em;
+}
+
+.qty-display small {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+/* 件数表示: 数字だけ大きく見せる */
+#inventory-count-text,
+#shopping-count-text {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+/* JAN入力欄: 読み取り値らしく字間広め */
+#jan-manual-input,
+#field-jan {
+  font-family: var(--font-tech);
+  font-size: 14px;
+  letter-spacing: 0.12em;
+}
+
+/* 同期バッジ: 小さな端末表示のように */
+.sync-badge {
+  font-family: var(--font-display);
+  letter-spacing: 0.14em;
+}
+
+/* ============================================================
+ * 筆文字の採用（2026-11-24）— 3案比較のうえユーザーがB案を選択。
+ * タイトル・「在」の札・セクション見出しだけ筆文字（Yuji Syuku）にし、
+ * 操作系は Zen Kaku Gothic Antique、英数字は Michroma のまま。
+ * ============================================================ */
+.app-title {
+  font-family: "Yuji Syuku", "Zen Kaku Gothic Antique", serif;
+  font-size: 23px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+.app-mark {
+  font-family: "Yuji Syuku", serif;
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.section-title {
+  font-family: "Yuji Syuku", "Zen Kaku Gothic Antique", serif;
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+.subsection-title {
+  font-family: "Yuji Syuku", "Zen Kaku Gothic Antique", serif;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
