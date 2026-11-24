@@ -15,10 +15,19 @@
   const KINDS = ['kit', 'paint', 'decal', 'other'];
 
   const BUILD_STATUS_LABELS = {
+    reserved: '予約中',
     unbuilt: '未組立',
     building: '製作中',
     built: '完成'
   };
+
+  // 販路（ガンプラのみ）。札の右上の印は TAG_MARKS
+  const CHANNEL_LABELS = {
+    general: '一般販売',
+    pbandai: 'プレバン',
+    limited: '限定品'
+  };
+  const TAG_MARKS = { pbandai: 'P', limited: '限' };
 
   const STATUS_LABELS = {
     ok: '在庫あり',
@@ -43,6 +52,7 @@
   let filterKind = 'all';
   let filterStatus = 'all';
   let filterBuild = 'all';
+  let filterChannel = 'all';
   let localMatchId = '';
   let formReturnTab = '';
   let searchQuery = '';
@@ -67,6 +77,8 @@
     statusChips: document.querySelectorAll('[data-filter-status]'),
     buildChips: document.querySelectorAll('[data-filter-build]'),
     buildChipRow: document.getElementById('build-chip-row'),
+    channelChips: document.querySelectorAll('[data-filter-channel]'),
+    channelChipRow: document.getElementById('channel-chip-row'),
     inventoryCountText: document.getElementById('inventory-count-text'),
     inventoryList: document.getElementById('inventory-list'),
     btnOpenNewManual: document.getElementById('btn-open-new-manual'),
@@ -110,6 +122,9 @@
     fieldKitGroup: document.getElementById('kit-fields'),
     fieldGrade: document.getElementById('field-grade'),
     fieldBuildStatus: document.getElementById('field-buildStatus'),
+    fieldChannel: document.getElementById('field-channel'),
+    fieldShipMonth: document.getElementById('field-shipMonth'),
+    fieldShipMonthRow: document.getElementById('ship-month-row'),
     fieldScale: document.getElementById('field-scale'),
     fieldSubject: document.getElementById('field-subject'),
     fieldLocation: document.getElementById('field-location'),
@@ -180,6 +195,9 @@
       colorHex: normalizeHex(raw.colorHex),
       grade: kind === 'kit' ? String(raw.grade || '').trim() : '',
       buildStatus,
+      channel:
+        kind === 'kit' && Object.prototype.hasOwnProperty.call(CHANNEL_LABELS, raw.channel) ? raw.channel : kind === 'kit' ? 'general' : '',
+      shipMonth: kind === 'kit' && /^\d{4}-\d{2}$/.test(String(raw.shipMonth || '')) ? raw.shipMonth : '',
       scale: String(raw.scale || '').trim(),
       subject: String(raw.subject || '').trim(),
       qty: Math.max(0, parseInt(raw.qty, 10) || 0),
@@ -350,6 +368,16 @@
       });
     });
 
+    el.channelChips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filterChannel = chip.dataset.filterChannel;
+        setPressed(el.channelChips, chip);
+        renderInventoryList();
+      });
+    });
+
+    el.fieldBuildStatus.addEventListener('change', updateKitFieldsVisibility);
+
     el.fieldKind.addEventListener('change', updateKitFieldsVisibility);
 
     el.btnOpenNewManual.addEventListener('click', () => {
@@ -460,6 +488,11 @@
     // 製作状況フィルタはガンプラ表示時のみ意味を持つ
     const showBuildFilter = filterKind === 'all' || filterKind === 'kit';
     el.buildChipRow.hidden = !showBuildFilter;
+    el.channelChipRow.hidden = !showBuildFilter;
+    if (!showBuildFilter && filterChannel !== 'all') {
+      filterChannel = 'all';
+      setPressed(el.channelChips, [...el.channelChips].find((c) => c.dataset.filterChannel === 'all'));
+    }
     if (!showBuildFilter && filterBuild !== 'all') {
       filterBuild = 'all';
       setPressed(el.buildChips, [...el.buildChips].find((c) => c.dataset.filterBuild === 'all'));
@@ -469,6 +502,7 @@
       if (filterKind !== 'all' && item.kind !== filterKind) return false;
       if (filterStatus !== 'all' && getItemStatus(item) !== filterStatus) return false;
       if (filterBuild !== 'all' && item.buildStatus !== filterBuild) return false;
+      if (filterChannel !== 'all' && item.channel !== filterChannel) return false;
       if (searchQuery) {
         const hay = [
           item.name,
@@ -479,6 +513,7 @@
           item.subject,
           item.grade,
           BUILD_STATUS_LABELS[item.buildStatus] || '',
+          { pbandai: 'プレバン プレミアムバンダイ', limited: '限定品 イベント限定 店舗限定' }[item.channel] || '',
           item.memo
         ]
           .join(' ')
@@ -525,6 +560,11 @@
     });
   }
 
+  function formatShipMonth(ym) {
+    const [y, m] = ym.split('-');
+    return `${y}年${parseInt(m, 10)}月`;
+  }
+
   function getTagCode(item) {
     if (item.kind === 'kit') return item.grade || 'KIT';
     if (item.code) return item.code;
@@ -553,6 +593,8 @@
       : '';
 
     const metaParts = [];
+    if (item.channel && item.channel !== 'general') metaParts.push(CHANNEL_LABELS[item.channel]);
+    if (item.buildStatus === 'reserved' && item.shipMonth) metaParts.push(`発送予定 ${formatShipMonth(item.shipMonth)}`);
     if (item.brand) metaParts.push(item.brand);
     if (item.scale) metaParts.push(item.scale);
     if (item.kind !== 'kit' && item.code && item.code !== tagCode) metaParts.push(`品番 ${item.code}`);
@@ -565,7 +607,7 @@
 
     row.innerHTML = `
       <div class="item-tag${buildClass}">
-        <b class="tag-code${tagCode.length > 4 ? ' is-long' : ''}">${escapeHtml(tagCode)}</b>
+        <b class="tag-code${tagCode.length > 4 ? ' is-long' : ''}">${escapeHtml(tagCode)}${TAG_MARKS[item.channel] ? `<i class="tag-mark" title="${escapeHtml(CHANNEL_LABELS[item.channel])}">${TAG_MARKS[item.channel]}</i>` : ''}</b>
         ${swatch}
         <span class="tag-label">${escapeHtml(tagLabel)}</span>
       </div>
@@ -639,6 +681,8 @@
     el.fieldKind.value = KINDS.includes(prefill.kind) ? prefill.kind : 'paint';
     el.fieldGrade.value = prefill.grade || '';
     el.fieldBuildStatus.value = BUILD_STATUS_LABELS[prefill.buildStatus] ? prefill.buildStatus : 'unbuilt';
+    el.fieldChannel.value = CHANNEL_LABELS[prefill.channel] ? prefill.channel : 'general';
+    el.fieldShipMonth.value = prefill.shipMonth || '';
     updateKitFieldsVisibility();
     el.fieldBrand.value = prefill.brand || '';
     el.fieldCode.value = prefill.code || '';
@@ -666,6 +710,7 @@
 
   function updateKitFieldsVisibility() {
     el.fieldKitGroup.hidden = el.fieldKind.value !== 'kit';
+    el.fieldShipMonthRow.hidden = el.fieldBuildStatus.value !== 'reserved';
   }
 
   function handleSaveItemForm(e) {
@@ -681,6 +726,8 @@
       colorHex: normalizeHex(el.fieldColorHex.value),
       grade: el.fieldGrade.value.trim(),
       buildStatus: el.fieldBuildStatus.value,
+      channel: el.fieldChannel.value,
+      shipMonth: el.fieldBuildStatus.value === 'reserved' ? el.fieldShipMonth.value : '',
       qty: Math.max(0, parseInt(el.fieldQty.value, 10) || 0),
       desired: Math.max(0, parseInt(el.fieldDesired.value, 10) || 0),
       scale: el.fieldScale.value.trim(),
@@ -870,6 +917,7 @@
     const encoded = encodeURIComponent(jan);
     const sites = [
       { label: 'ホビーサーチで検索', url: `https://www.1999.co.jp/search?searchkey=${encoded}` },
+      { label: 'プレミアムバンダイで検索', url: `https://p-bandai.jp/search/?keyword=${encoded}` },
       { label: 'Amazonで検索', url: `https://www.amazon.co.jp/s?k=${encoded}` },
       { label: '楽天市場で検索', url: `https://search.rakuten.co.jp/search/mall/${encoded}/` },
       { label: '駿河屋で検索', url: `https://www.suruga-ya.jp/search?jan=${encoded}` }

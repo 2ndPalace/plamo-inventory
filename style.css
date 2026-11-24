@@ -368,6 +368,48 @@ textarea.input-control {
   padding-bottom: 6px;
 }
 
+/* 予約中（未着）: 破線の枠 */
+.item-tag.build-reserved .tag-code {
+  border-style: dashed;
+}
+
+/* 販路の印（P = プレミアムバンダイ / 限 = 限定品） */
+.tag-code {
+  position: relative;
+  overflow: visible;
+}
+
+.tag-mark {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--sheet);
+  border: 1px solid var(--sheet);
+  font-family: var(--font);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.item-tag.build-built .tag-code .tag-mark {
+  background: var(--sheet);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.kit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .item-tag.build-built .tag-code {
   background: var(--ink);
   color: var(--sheet);

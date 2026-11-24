@@ -48,9 +48,16 @@
           </div>
           <div class="toggle-row" id="build-chip-row" role="group" aria-label="製作状況（ガンプラ）">
             <button type="button" class="toggle active" data-filter-build="all" aria-pressed="true">全製作</button>
+            <button type="button" class="toggle" data-filter-build="reserved" aria-pressed="false">予約中</button>
             <button type="button" class="toggle" data-filter-build="unbuilt" aria-pressed="false">未組立</button>
             <button type="button" class="toggle" data-filter-build="building" aria-pressed="false">製作中</button>
             <button type="button" class="toggle" data-filter-build="built" aria-pressed="false">完成</button>
+          </div>
+          <div class="toggle-row" id="channel-chip-row" role="group" aria-label="販路（ガンプラ）">
+            <button type="button" class="toggle active" data-filter-channel="all" aria-pressed="true">全販路</button>
+            <button type="button" class="toggle" data-filter-channel="general" aria-pressed="false">一般</button>
+            <button type="button" class="toggle" data-filter-channel="pbandai" aria-pressed="false">プレバン</button>
+            <button type="button" class="toggle" data-filter-channel="limited" aria-pressed="false">限定品</button>
           </div>
         </div>
 
@@ -145,7 +152,8 @@
             </div>
           </div>
 
-          <div class="form-grid-2" id="kit-fields" hidden>
+          <div class="kit-fields" id="kit-fields" hidden>
+          <div class="form-grid-2">
             <div class="form-row">
               <label for="field-grade">グレード</label>
               <input type="text" id="field-grade" class="input-control num" list="grade-options" placeholder="HG / RG / MG / PG">
@@ -163,11 +171,27 @@
             <div class="form-row">
               <label for="field-buildStatus">製作状況</label>
               <select id="field-buildStatus" class="input-control">
+                <option value="reserved">予約中（未着）</option>
                 <option value="unbuilt">未組立</option>
                 <option value="building">製作中</option>
                 <option value="built">完成</option>
               </select>
             </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="field-channel">販路</label>
+              <select id="field-channel" class="input-control">
+                <option value="general">一般販売</option>
+                <option value="pbandai">プレミアムバンダイ</option>
+                <option value="limited">イベント・店舗限定</option>
+              </select>
+            </div>
+            <div class="form-row" id="ship-month-row" hidden>
+              <label for="field-shipMonth">発送予定月</label>
+              <input type="month" id="field-shipMonth" class="input-control num">
+            </div>
+          </div>
           </div>
 
           <div class="form-grid-2">
