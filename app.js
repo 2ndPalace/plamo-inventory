@@ -75,6 +75,8 @@
   let scanLoopId = null;
   let captureCanvasEl = null;
   let scanEngine = '';
+  let scanMode = 'register';
+  let currentLookupJan = '';
   let backCameras = [];
   let currentCameraId = '';
   let isScanning = false;
@@ -112,6 +114,11 @@
     scannerVideo: document.getElementById('scanner-video'),
     janLookupForm: document.getElementById('jan-lookup-form'),
     janManualInput: document.getElementById('jan-manual-input'),
+    btnLookupScan: document.getElementById('btn-lookup-scan'),
+    lookupJanForm: document.getElementById('lookup-jan-form'),
+    lookupJanInput: document.getElementById('lookup-jan-input'),
+    lookupResultPanel: document.getElementById('lookup-result-panel'),
+    lookupResult: document.getElementById('lookup-result'),
     lookupLogPanel: document.getElementById('lookup-log-panel'),
     lookupLogList: document.getElementById('lookup-log-list'),
     localMatchPanel: document.getElementById('local-match-panel'),
@@ -406,8 +413,19 @@
 
     // スキャナ・JAN検索
     el.btnStartScan.addEventListener('click', () => {
+      scanMode = 'register';
       scanRestartUsed = false;
       startCameraScan();
+    });
+    el.btnLookupScan.addEventListener('click', () => {
+      scanMode = 'lookup';
+      scanRestartUsed = false;
+      switchTab('register');
+      startCameraScan();
+    });
+    el.lookupJanForm.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      showStockLookup(el.lookupJanInput.value);
     });
     el.btnStopScan.addEventListener('click', stopCameraScan);
     el.btnSwitchCamera.addEventListener('click', switchCamera);
@@ -1114,8 +1132,74 @@
   // 読み取り成功時の共通処理
   function handleDecodedJan(code) {
     stopCameraScan();
+    if (scanMode === 'lookup') {
+      scanMode = 'register';
+      showStockLookup(code);
+      switchTab('lookup');
+      return;
+    }
     el.janManualInput.value = code;
     runJanLookupChain(code);
+  }
+
+  // 在庫照会: JANから在庫を引いて所持数を大きく見せる
+  function showStockLookup(jan) {
+    const code = (jan || '').replace(/\D/g, '');
+    if (!code) return;
+    currentLookupJan = code;
+    el.lookupJanInput.value = code;
+    const matches = inventory.items.filter((it) => (it.jan || '').replace(/\D/g, '') === code);
+    el.lookupResultPanel.hidden = false;
+    if (!matches.length) {
+      el.lookupResult.innerHTML = `
+        <p class="lookup-jan num">JAN ${escapeHtml(code)}</p>
+        <p class="lookup-none">未登録です。在庫にありません。</p>
+        <button type="button" id="btn-lookup-register" class="btn btn-primary btn-lg">このJANで新規登録する</button>`;
+      document.getElementById('btn-lookup-register').addEventListener('click', () => {
+        switchTab('register');
+        el.janManualInput.value = code;
+        runJanLookupChain(code);
+      });
+      return;
+    }
+    const total = matches.reduce((sum, it) => sum + (it.qty || 0), 0);
+    el.lookupResult.innerHTML = matches.map((item) => {
+      const status = getItemStatus(item);
+      const metaParts = [];
+      if (item.kind === 'kit' && item.grade) metaParts.push(item.grade);
+      if (item.kind !== 'kit') metaParts.push(KIND_LABELS[item.kind] || '');
+      if (item.brand) metaParts.push(item.brand);
+      if (item.scale) metaParts.push(item.scale);
+      if (item.code) metaParts.push(`品番 ${item.code}`);
+      if (item.kind === 'kit' && item.buildStatus) metaParts.push(BUILD_STATUS_LABELS[item.buildStatus] || '');
+      if (item.location) metaParts.push(`置き場: ${item.location}`);
+      return `
+        <div class="lookup-item">
+          <p class="lookup-jan num">JAN ${escapeHtml(code)}</p>
+          <h3 class="lookup-name">${escapeHtml(item.name)}</h3>
+          <p class="lookup-meta">${escapeHtml(metaParts.filter(Boolean).join(' ・ '))}</p>
+          <div class="lookup-count-wrap">
+            <span class="lookup-count num">${item.qty}</span><span class="lookup-count-unit">個</span>
+          </div>
+          <p class="lookup-status status-${status}">${STATUS_LABELS[status]}${item.desired ? `（目標 ${item.desired}）` : ''}</p>
+          <div class="lookup-actions">
+            <button type="button" class="btn btn-secondary btn-lg" data-lookup-dec="${item.id}">−</button>
+            <button type="button" class="btn btn-secondary btn-lg" data-lookup-inc="${item.id}">＋</button>
+          </div>
+        </div>`;
+    }).join('') + (matches.length > 1 ? `<p class="lookup-total">合計 <b class="num">${total}</b> 個</p>` : '');
+    el.lookupResult.querySelectorAll('[data-lookup-dec]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        adjustQty(btn.dataset.lookupDec, -1);
+        showStockLookup(currentLookupJan);
+      });
+    });
+    el.lookupResult.querySelectorAll('[data-lookup-inc]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        adjustQty(btn.dataset.lookupInc, 1);
+        showStockLookup(currentLookupJan);
+      });
+    });
   }
 
   // スキャン中の診断表示: 試行回数・映像解像度・直近のエラーを出す

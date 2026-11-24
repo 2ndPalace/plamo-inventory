@@ -85,6 +85,25 @@
       <div id="shopping-list" class="sheet item-list"></div>
     </section>
 
+    <!-- タブ: 在庫照会 -->
+    <section id="view-lookup" class="tab-view" aria-label="在庫照会" hidden>
+      <div class="panel">
+        <h2 class="section-title">在庫照会</h2>
+        <p class="section-desc">バーコードを読むと、登録済みなら所持数が大きく表示されます。店の棚の前での確認用です。</p>
+        <div class="scanner-controls">
+          <button type="button" id="btn-lookup-scan" class="btn btn-primary btn-lg">バーコードで照会</button>
+        </div>
+        <form id="lookup-jan-form" class="jan-input-row">
+          <input type="text" id="lookup-jan-input" class="input-control num" inputmode="numeric" placeholder="JANを入力してEnter" aria-label="JANコード">
+          <button type="submit" class="btn btn-primary">照会</button>
+        </form>
+      </div>
+
+      <div id="lookup-result-panel" class="panel" hidden>
+        <div id="lookup-result"></div>
+      </div>
+    </section>
+
     <!-- タブ3: JAN登録 -->
     <section id="view-register" class="tab-view" aria-label="JAN登録" hidden>
       <div class="panel">
@@ -349,6 +368,7 @@
   <!-- 下部固定ナビゲーション（片手操作向け） -->
   <nav class="bottom-nav" aria-label="メインメニュー">
     <button type="button" class="nav-btn active" data-tab="inventory" aria-current="page">在庫</button>
+    <button type="button" class="nav-btn" data-tab="lookup">照会</button>
     <button type="button" class="nav-btn" data-tab="shopping">
       買い物<span id="nav-shopping-badge" class="nav-badge num" hidden>0</span>
     </button>

@@ -1213,3 +1213,69 @@ body {
   font-weight: 400;
   letter-spacing: 0.1em;
 }
+
+/* 在庫照会: 所持数を一目で大きく見せる */
+.lookup-jan {
+  color: var(--ink-2, #555);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  margin: 0 0 4px;
+}
+.lookup-name {
+  font-size: 20px;
+  margin: 0 0 2px;
+  line-height: 1.35;
+}
+.lookup-meta {
+  color: var(--ink-2, #555);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.lookup-count-wrap {
+  text-align: center;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line, #c9cac2);
+  border-bottom: 1px solid var(--line, #c9cac2);
+}
+.lookup-count {
+  font-size: 84px;
+  line-height: 1;
+}
+.lookup-count-unit {
+  font-size: 20px;
+  margin-left: 6px;
+}
+.lookup-status {
+  text-align: center;
+  font-size: 15px;
+  margin: 8px 0 12px;
+}
+.lookup-status.status-out, .lookup-status.status-none {
+  color: #c8401f;
+  font-weight: 700;
+}
+.lookup-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.lookup-actions .btn {
+  min-width: 96px;
+  font-size: 20px;
+}
+.lookup-none {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 10px 0 14px;
+}
+.lookup-item + .lookup-item {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 2px solid var(--line, #c9cac2);
+}
+.lookup-total {
+  text-align: center;
+  font-size: 16px;
+  margin-top: 14px;
+}
