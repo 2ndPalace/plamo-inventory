@@ -63,6 +63,8 @@
   let detectorStream = null;
   let detectorRafId = null;
   let scanWatchdogId = null;
+  let decodeWatchdogId = null;
+  let scanRestartUsed = false;
   let backCameras = [];
   let currentCameraId = '';
   let isScanning = false;
@@ -393,7 +395,10 @@
     });
 
     // スキャナ・JAN検索
-    el.btnStartScan.addEventListener('click', startCameraScan);
+    el.btnStartScan.addEventListener('click', () => {
+      scanRestartUsed = false;
+      startCameraScan();
+    });
     el.btnStopScan.addEventListener('click', stopCameraScan);
     el.btnSwitchCamera.addEventListener('click', switchCamera);
 
@@ -862,32 +867,18 @@
           el.scannerVideo.play().catch(() => {});
         }
 
-        // 対応端末では連続オートフォーカスと高解像度を要求してピントと読み取りを助ける
-        try {
-          const stream = el.scannerVideo.srcObject;
-          const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-          if (track && track.getCapabilities && track.applyConstraints) {
-            const caps = track.getCapabilities();
-            const advanced = [];
-            if (caps.focusMode && caps.focusMode.includes('continuous')) {
-              advanced.push({ focusMode: 'continuous' });
-            }
-            if (caps.exposureMode && caps.exposureMode.includes('continuous')) {
-              advanced.push({ exposureMode: 'continuous' });
-            }
-            const constraints = {};
-            if (caps.width && caps.width.max >= 1280) {
-              constraints.width = { ideal: 1920 };
-              constraints.height = { ideal: 1080 };
-            }
-            if (advanced.length) constraints.advanced = advanced;
-            if (Object.keys(constraints).length) {
-              await track.applyConstraints(constraints).catch(() => {});
-            }
+        // 注意: 起動後の applyConstraints（解像度・フォーカス変更）は行わない。
+        // iOS では表示映像と解析用フレームがずれ、ピントが合って見えるのに
+        // 読み取りだけ止まる症状が実機で出たため。フォーカスはレンズ切替で担保する。
+        // 12秒読めなければリーダーを1回だけ自動で再起動する（フレーム固着対策）
+        decodeWatchdogId = setTimeout(() => {
+          if (isScanning && !scanRestartUsed) {
+            scanRestartUsed = true;
+            el.scannerHint.textContent = '読み取りを再起動しています…';
+            stopCameraScan();
+            startCameraScan();
           }
-        } catch {
-          // 制約を付けられなくても読み取りは続行する
-        }
+        }, 12000);
 
         // 映像が届いていない場合の見守り（真っ黒なまま無言にしない）
         scanWatchdogId = setTimeout(() => {
@@ -960,6 +951,7 @@
     isScanning = false;
     if (scanWatchdogId) {
       clearTimeout(scanWatchdogId);
+      clearTimeout(decodeWatchdogId);
       scanWatchdogId = null;
     }
     if (zxingReader) {
