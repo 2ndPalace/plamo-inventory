@@ -42,7 +42,8 @@
     githubBranch: 'main',
     githubPath: 'inventory.json',
     githubToken: '',
-    proxyUrl: ''
+    proxyUrl: '',
+    cameraDeviceId: ''
   };
 
   // アプリケーション状態
@@ -62,6 +63,8 @@
   let detectorStream = null;
   let detectorRafId = null;
   let scanWatchdogId = null;
+  let backCameras = [];
+  let currentCameraId = '';
   let isScanning = false;
 
   // DOM 要素参照
@@ -91,6 +94,7 @@
     // JAN登録・スキャナ
     btnStartScan: document.getElementById('btn-start-scan'),
     btnStopScan: document.getElementById('btn-stop-scan'),
+    btnSwitchCamera: document.getElementById('btn-switch-camera'),
     scannerHint: document.getElementById('scanner-hint'),
     scannerViewportWrap: document.getElementById('scanner-viewport-wrap'),
     scannerVideo: document.getElementById('scanner-video'),
@@ -391,6 +395,7 @@
     // スキャナ・JAN検索
     el.btnStartScan.addEventListener('click', startCameraScan);
     el.btnStopScan.addEventListener('click', stopCameraScan);
+    el.btnSwitchCamera.addEventListener('click', switchCamera);
 
     el.janLookupForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -815,7 +820,8 @@
         };
 
         // iOS では facingMode 任せだと映像が来ないことがあるため、
-        // 先に許可を取って背面のメインカメラを deviceId で明示する。
+        // 先に許可を取って背面カメラを deviceId で明示する。
+        // 近距離に強いレンズは機種で違うので、背面レンズは切替可能にし選択を保存する。
         let deviceId;
         try {
           const probe = await navigator.mediaDevices.getUserMedia({
@@ -825,12 +831,19 @@
           probe.getTracks().forEach((t) => t.stop());
           const devices = (await navigator.mediaDevices.enumerateDevices())
             .filter((d) => d.kind === 'videoinput');
-          const main = devices.find((d) => /背面カメラ|back camera/i.test(d.label));
-          const back = devices.find((d) => /back|rear|背面|後面/i.test(d.label)
-            && !/front|前面/i.test(d.label));
-          const nonFront = devices.filter((d) => !/front|前面/i.test(d.label));
-          const picked = main || back || nonFront[nonFront.length - 1] || devices[0];
-          if (picked) deviceId = picked.deviceId;
+          backCameras = devices.filter((d) => !/front|前面/i.test(d.label));
+          if (!backCameras.length) backCameras = devices;
+          const saved = backCameras.find((d) => d.deviceId === settings.cameraDeviceId);
+          const main = backCameras.find((d) => /背面カメラ|back camera/i.test(d.label));
+          const picked = saved || main || backCameras[backCameras.length - 1];
+          if (picked) {
+            deviceId = picked.deviceId;
+            currentCameraId = picked.deviceId;
+            if (picked.label) {
+              el.scannerHint.textContent = `バーコードを探しています…（${picked.label}）`;
+            }
+            el.btnSwitchCamera.hidden = backCameras.length < 2;
+          }
         } catch {
           // デバイス列挙に失敗したら constraints 方式にフォールバック
           deviceId = undefined;
@@ -980,6 +993,17 @@
     el.btnStartScan.hidden = active;
     el.btnStopScan.hidden = !active;
     el.scannerViewportWrap.hidden = !active;
+    if (!active) el.btnSwitchCamera.hidden = true;
+  }
+
+  // 背面レンズを順に切り替える（マクロに強いレンズは機種で違うため）。選択は保存する
+  function switchCamera() {
+    if (!isScanning || backCameras.length < 2) return;
+    const idx = backCameras.findIndex((d) => d.deviceId === currentCameraId);
+    const next = backCameras[(idx + 1) % backCameras.length];
+    saveSettings({ ...settings, cameraDeviceId: next.deviceId });
+    stopCameraScan();
+    startCameraScan();
   }
 
   // --- JAN照合チェーン ---
