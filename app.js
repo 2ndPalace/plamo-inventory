@@ -65,6 +65,11 @@
   let scanWatchdogId = null;
   let decodeWatchdogId = null;
   let scanRestartUsed = false;
+  let decodeAttempts = 0;
+  let lastDecodeError = '';
+  let scanStatusIntervalId = null;
+  let currentCameraLabel = '';
+  let parallelDetectorOn = false;
   let backCameras = [];
   let currentCameraId = '';
   let isScanning = false;
@@ -810,17 +815,20 @@
           hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
         }
         zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
+        decodeAttempts = 0;
+        lastDecodeError = '';
         const onResult = (result, err) => {
+          decodeAttempts++;
           if (result) {
             const code = result.getText().trim();
             // JANは13桁または8桁のみ採用する（誤読・部分読みで止めない）
             if (/^\d{13}$/.test(code) || /^\d{8}$/.test(code)) {
-              stopCameraScan();
-              el.janManualInput.value = code;
-              runJanLookupChain(code);
+              handleDecodedJan(code);
             }
           } else if (err && !(err instanceof window.ZXing.NotFoundException)) {
-            // 連続読み取り中の一時的なデコード失敗は無視
+            // NotFound以外のエラーはループが止まる原因になるため画面に出す（診断用）
+            lastDecodeError = `${err.name || 'Error'}: ${err.message || err}`;
+            updateScanStatus();
           }
         };
 
@@ -844,9 +852,7 @@
           if (picked) {
             deviceId = picked.deviceId;
             currentCameraId = picked.deviceId;
-            if (picked.label) {
-              el.scannerHint.textContent = `バーコードを探しています…（${picked.label}）`;
-            }
+            currentCameraLabel = picked.label || '';
             el.btnSwitchCamera.hidden = backCameras.length < 2;
           }
         } catch {
@@ -868,17 +874,12 @@
         }
 
         // 注意: 起動後の applyConstraints（解像度・フォーカス変更）は行わない。
-        // iOS では表示映像と解析用フレームがずれ、ピントが合って見えるのに
-        // 読み取りだけ止まる症状が実機で出たため。フォーカスはレンズ切替で担保する。
-        // 12秒読めなければリーダーを1回だけ自動で再起動する（フレーム固着対策）
-        decodeWatchdogId = setTimeout(() => {
-          if (isScanning && !scanRestartUsed) {
-            scanRestartUsed = true;
-            el.scannerHint.textContent = '読み取りを再起動しています…';
-            stopCameraScan();
-            startCameraScan();
-          }
-        }, 12000);
+        // フォーカスはレンズ切替とOS標準のAFに任せる。
+        // 診断表示（試行回数・映像解像度・非NotFoundエラー）を2秒ごとに更新し、
+        // 端末標準の BarcodeDetector があれば同じ映像で並行検出する。
+        updateScanStatus();
+        scanStatusIntervalId = setInterval(updateScanStatus, 2000);
+        startParallelDetector();
 
         // 映像が届いていない場合の見守り（真っ黒なまま無言にしない）
         scanWatchdogId = setTimeout(() => {
@@ -952,6 +953,8 @@
     if (scanWatchdogId) {
       clearTimeout(scanWatchdogId);
       clearTimeout(decodeWatchdogId);
+      clearInterval(scanStatusIntervalId);
+      parallelDetectorOn = false;
       scanWatchdogId = null;
     }
     if (zxingReader) {
@@ -986,6 +989,60 @@
     el.btnStopScan.hidden = !active;
     el.scannerViewportWrap.hidden = !active;
     if (!active) el.btnSwitchCamera.hidden = true;
+  }
+
+  // 読み取り成功時の共通処理
+  function handleDecodedJan(code) {
+    stopCameraScan();
+    el.janManualInput.value = code;
+    runJanLookupChain(code);
+  }
+
+  // スキャン中の診断表示: 試行回数・映像解像度・直近のエラーを出す
+  function updateScanStatus() {
+    if (!isScanning) return;
+    const vw = el.scannerVideo.videoWidth || 0;
+    const vh = el.scannerVideo.videoHeight || 0;
+    let text = 'バーコードを探しています…';
+    if (currentCameraLabel) text += `（${currentCameraLabel}）`;
+    text += ` 試行${decodeAttempts}回・映像${vw}×${vh}`;
+    if (lastDecodeError) text += `・エラー: ${lastDecodeError}`;
+    el.scannerHint.textContent = text;
+  }
+
+  // 端末標準 BarcodeDetector があれば、ZXingと同じ映像で並行検出する
+  function startParallelDetector() {
+    if (!('BarcodeDetector' in window) || parallelDetectorOn) return;
+    let detector;
+    try {
+      detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128']
+      });
+    } catch {
+      return;
+    }
+    parallelDetectorOn = true;
+    let lastTry = 0;
+    const loop = async (ts) => {
+      if (!parallelDetectorOn || !isScanning) return;
+      if (ts - lastTry >= 250) {
+        lastTry = ts;
+        try {
+          const codes = await detector.detect(el.scannerVideo);
+          for (const c of codes) {
+            const raw = (c.rawValue || '').trim();
+            if (/^\d{13}$/.test(raw) || /^\d{8}$/.test(raw)) {
+              handleDecodedJan(raw);
+              return;
+            }
+          }
+        } catch {
+          // 映像未準備などの一時エラーは無視して続ける
+        }
+      }
+      detectorRafId = requestAnimationFrame(loop);
+    };
+    detectorRafId = requestAnimationFrame(loop);
   }
 
   // 背面レンズを順に切り替える（マクロに強いレンズは機種で違うため）。選択は保存する

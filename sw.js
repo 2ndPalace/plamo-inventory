@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plamo-inventory-shell-v12';
+const CACHE_NAME = 'plamo-inventory-shell-v13';
 const APP_SHELL_FILES = [
   './',
   './index.html',
