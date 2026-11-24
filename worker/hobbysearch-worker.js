@@ -23,16 +23,19 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-async function fetchMarkdownViaReader(targetUrl) {
-  const res = await fetch(`https://r.jina.ai/${targetUrl}`, {
-    headers: { Accept: 'text/plain' }
-  });
+async function fetchMarkdownViaReader(targetUrl, env) {
+  const headers = { Accept: 'text/plain' };
+  // 任意: Workerのシークレット JINA_API_KEY があれば付けると制限が大幅に緩む
+  if (env && env.JINA_API_KEY) {
+    headers.Authorization = `Bearer ${env.JINA_API_KEY}`;
+  }
+  const res = await fetch(`https://r.jina.ai/${targetUrl}`, { headers });
   const text = await res.text();
   return { res, text };
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -51,7 +54,7 @@ export default {
     try {
       let md = null;
       for (let attempt = 0; attempt < 2; attempt++) {
-        const { res, text } = await fetchMarkdownViaReader(searchUrl);
+        const { res, text } = await fetchMarkdownViaReader(searchUrl, env);
         if (res.status === 429 || text.includes('RateLimitTriggeredError')) {
           if (attempt === 0) {
             await new Promise((r) => setTimeout(r, 3500));
