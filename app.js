@@ -790,11 +790,21 @@
         toggleScannerUi(true);
         el.scannerHint.textContent = 'バーコードを探しています…';
 
-        zxingReader = new window.ZXing.BrowserMultiFormatReader();
+        // JAN系フォーマットに絞り、TRY_HARDERで読み取り率を上げる
+        const hints = new Map();
+        if (window.ZXing.DecodeHintType && window.ZXing.BarcodeFormat) {
+          const BF = window.ZXing.BarcodeFormat;
+          hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            BF.EAN_13, BF.EAN_8, BF.UPC_A, BF.UPC_E, BF.CODE_128
+          ]);
+          hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+        }
+        zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
         const onResult = (result, err) => {
           if (result) {
             const code = result.getText().trim();
-            if (code) {
+            // JANは13桁または8桁のみ採用する（誤読・部分読みで止めない）
+            if (/^\d{13}$/.test(code) || /^\d{8}$/.test(code)) {
               stopCameraScan();
               el.janManualInput.value = code;
               runJanLookupChain(code);
@@ -839,6 +849,33 @@
           el.scannerVideo.play().catch(() => {});
         }
 
+        // 対応端末では連続オートフォーカスと高解像度を要求してピントと読み取りを助ける
+        try {
+          const stream = el.scannerVideo.srcObject;
+          const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+          if (track && track.getCapabilities && track.applyConstraints) {
+            const caps = track.getCapabilities();
+            const advanced = [];
+            if (caps.focusMode && caps.focusMode.includes('continuous')) {
+              advanced.push({ focusMode: 'continuous' });
+            }
+            if (caps.exposureMode && caps.exposureMode.includes('continuous')) {
+              advanced.push({ exposureMode: 'continuous' });
+            }
+            const constraints = {};
+            if (caps.width && caps.width.max >= 1280) {
+              constraints.width = { ideal: 1920 };
+              constraints.height = { ideal: 1080 };
+            }
+            if (advanced.length) constraints.advanced = advanced;
+            if (Object.keys(constraints).length) {
+              await track.applyConstraints(constraints).catch(() => {});
+            }
+          }
+        } catch {
+          // 制約を付けられなくても読み取りは続行する
+        }
+
         // 映像が届いていない場合の見守り（真っ黒なまま無言にしない）
         scanWatchdogId = setTimeout(() => {
           if (isScanning && (!el.scannerVideo.videoWidth || el.scannerVideo.readyState < 2)) {
@@ -877,10 +914,14 @@
               const codes = await detector.detect(el.scannerVideo);
               if (codes && codes.length > 0 && codes[0].rawValue) {
                 const code = codes[0].rawValue.trim();
-                stopCameraScan();
-                el.janManualInput.value = code;
-                runJanLookupChain(code);
-                return;
+                if (!/^\d{13}$/.test(code) && !/^\d{8}$/.test(code)) {
+                  // JANの桁数でない読み取りは採用せず探し続ける
+                } else {
+                  stopCameraScan();
+                  el.janManualInput.value = code;
+                  runJanLookupChain(code);
+                  return;
+                }
               }
             }
           } catch {
@@ -969,6 +1010,44 @@
     el.webSearchPanel.hidden = false;
   }
 
+  // 照合で得た候補に、名前とJANから分かる項目（グレード/スケール/メーカー/種別）を補完する
+  function enrichCandidate(candidate) {
+    const c = { ...candidate };
+    if (c.name) {
+      // ホビーサーチのタイトル末尾の分類表記は商品名から外す
+      c.name = c.name.replace(/\s*[（(](塗料|デカール|工具・塗料)[）)]\s*$/, '').trim();
+    }
+    const name = c.name || '';
+
+    if (!c.grade && name) {
+      const g = name.match(/(?:^|[\s　])(MGEX|HGUC|HGCE|HGAC|HGBF|HGBD|HG|RG|MG|PG|EG|SD|FM)(?:[\s　]|$)/);
+      if (g) c.grade = g[1];
+    }
+    if (!c.scale && name) {
+      const s = name.match(/(1\/\d{2,3})/);
+      if (s) c.scale = s[1];
+    }
+    if (!c.kind && name) {
+      if (/デカール/.test(name)) c.kind = 'decal';
+      else if (/[（(]塗料[）)]/.test(candidate.name || '') || /塗料$/.test(name)) c.kind = 'paint';
+      else if (c.grade || c.scale) c.kind = 'kit';
+    }
+    if (!c.brand && c.jan && /^\d{13}$/.test(c.jan)) {
+      // JAN先頭7桁はGS1事業者コード。主なホビーメーカーのみ推定する
+      const BRAND_BY_JAN_PREFIX = {
+        '4573102': 'BANDAI SPIRITS',
+        '4543112': 'BANDAI SPIRITS',
+        '4973028': 'GSIクレオス',
+        '4950344': 'タミヤ',
+        '4934054': 'コトブキヤ',
+        '4582182': 'ガイアノーツ'
+      };
+      const brand = BRAND_BY_JAN_PREFIX[c.jan.slice(0, 7)];
+      if (brand) c.brand = brand;
+    }
+    return c;
+  }
+
   async function runJanLookupChain(jan) {
     el.lookupLogPanel.hidden = false;
     el.lookupLogList.innerHTML = '';
@@ -993,7 +1072,7 @@
     // 2. UPCitemdb トライアルAPI
     const upcCandidate = await tryUpcItemDb(jan);
     if (upcCandidate) {
-      openItemForm(upcCandidate, false);
+      openItemForm(enrichCandidate(upcCandidate), false);
       renderWebSearchLinks(jan);
       el.itemFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -1002,7 +1081,7 @@
     // 3. ホビーサーチ用プロキシ
     const proxyCandidate = await tryHobbySearchProxy(jan);
     if (proxyCandidate) {
-      openItemForm(proxyCandidate, false);
+      openItemForm(enrichCandidate(proxyCandidate), false);
       renderWebSearchLinks(jan);
       el.itemFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
